@@ -1,12 +1,16 @@
 /**
  * AuthService — Client-side token storage and validation.
  *
- * Stores the JWT in sessionStorage (not localStorage) so it is
- * automatically cleared when the browser tab closes. Never hardcodes
- * credentials. Actual credential verification happens server-side.
+ * Stores the JWT with persistence across tabs/reloads:
+ *   1) sessionStorage (fast path)
+ *   2) localStorage  (survives browser restarts)
+ *   3) cookie fallback (same-origin, SameSite=Lax)
+ *
+ * Never hardcodes credentials. Actual credential verification happens server-side.
  */
 
 const TOKEN_KEY = 'dp_auth_token';
+const TOKEN_COOKIE = 'dp_auth_token';
 
 /**
  * Thrown by AuthService.apiFetch() when a 401 is received.
@@ -22,15 +26,37 @@ export class AuthRedirectError extends Error {
 
 export class AuthService {
   static getToken(): string | null {
-    return sessionStorage.getItem(TOKEN_KEY);
+    const inSession = sessionStorage.getItem(TOKEN_KEY);
+    if (inSession) return inSession;
+
+    const inLocal = localStorage.getItem(TOKEN_KEY);
+    if (inLocal) {
+      sessionStorage.setItem(TOKEN_KEY, inLocal);
+      return inLocal;
+    }
+
+    const inCookie = this.readCookie(TOKEN_COOKIE);
+    if (inCookie) {
+      sessionStorage.setItem(TOKEN_KEY, inCookie);
+      localStorage.setItem(TOKEN_KEY, inCookie);
+      return inCookie;
+    }
+
+    return null;
   }
 
   static setToken(token: string): void {
     sessionStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(TOKEN_KEY, token);
+
+    const maxAge = this.tokenMaxAgeSeconds(token);
+    this.writeCookie(TOKEN_COOKIE, token, maxAge ?? 8 * 60 * 60);
   }
 
   static clearToken(): void {
     sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    this.clearCookie(TOKEN_COOKIE);
   }
 
   static isAuthenticated(): boolean {
@@ -43,10 +69,59 @@ export class AuthService {
       if (!payloadB64) return false;
       const payload = JSON.parse(atob(payloadB64)) as { exp?: number };
       if (payload.exp === undefined) return false;
-      return Date.now() / 1000 < payload.exp;
+      const valid = Date.now() / 1000 < payload.exp;
+      if (!valid) this.clearToken();
+      return valid;
     } catch {
+      this.clearToken();
       return false;
     }
+  }
+
+  static getPersistenceStatus(): {
+    persisted: boolean;
+    source: 'local' | 'cookie' | 'session' | 'none';
+  } {
+    const token = this.getToken();
+    if (!token || !this.isAuthenticated()) {
+      return { persisted: false, source: 'none' };
+    }
+
+    const inLocal = localStorage.getItem(TOKEN_KEY) === token;
+    if (inLocal) return { persisted: true, source: 'local' };
+
+    const inCookie = this.readCookie(TOKEN_COOKIE) === token;
+    if (inCookie) return { persisted: true, source: 'cookie' };
+
+    return { persisted: false, source: 'session' };
+  }
+
+  private static tokenMaxAgeSeconds(token: string): number | null {
+    try {
+      const [, payloadB64] = token.split('.');
+      if (!payloadB64) return null;
+      const payload = JSON.parse(atob(payloadB64)) as { exp?: number };
+      if (payload.exp === undefined) return null;
+      return Math.max(1, Math.floor(payload.exp - Date.now() / 1000));
+    } catch {
+      return null;
+    }
+  }
+
+  private static readCookie(name: string): string | null {
+    const prefix = `${name}=`;
+    const entry = document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith(prefix));
+    if (!entry) return null;
+    return decodeURIComponent(entry.slice(prefix.length));
+  }
+
+  private static writeCookie(name: string, value: string, maxAgeSeconds: number): void {
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secure}`;
+  }
+
+  private static clearCookie(name: string): void {
+    document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
   }
 
   /**

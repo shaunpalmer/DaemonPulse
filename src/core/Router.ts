@@ -33,13 +33,18 @@ class RouterClass {
   }
 
   navigate(route: Route): void {
-    window.location.hash = route;
+    const current = Store.getState().currentRoute;
+    if (current !== route) {
+      Store.navigate(route);
+    }
   }
 
   private handleChange(): void {
     const hash = window.location.hash.slice(1) || '/fleet';
     const route = isValidRoute(hash) ? hash : '/fleet';
-    Store.navigate(route);
+    if (Store.getState().currentRoute !== route) {
+      Store.navigate(route);
+    }
   }
 }
 

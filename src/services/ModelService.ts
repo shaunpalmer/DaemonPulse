@@ -8,7 +8,10 @@
 import type { IModel, IModelLoadConfig, IVRAMEstimate } from '@/types';
 import type { DaemonService } from './DaemonService';
 
-/** Q4_K_M VRAM estimates — from LMStudioDaemon.md section 5 */
+/**
+ * Q4_K_M VRAM estimates — from LMStudioDaemon.md section 5.
+ * Kept intentionally for ForgeView memory guidance and OOM prevention UX.
+ */
 export const VRAM_GUIDE: readonly { params: string; minGb: number; maxGb: number; hardware: string }[] = [
   { params: '3B',      minGb: 3,  maxGb: 4,  hardware: 'Entry (GTX 1650, RTX 3050)' },
   { params: '7B–8B',   minGb: 6,  maxGb: 8,  hardware: 'Mid-range (RTX 4060, M1 16GB)' },

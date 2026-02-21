@@ -66,12 +66,6 @@ export interface IGPUInfo {
 
 export type GPUAllocationStrategy = 'priority' | 'even' | 'dedicated';
 
-export interface IAllocationConfig {
-  strategy: GPUAllocationStrategy;
-  gpuOffloadRatio: number;      // 0.0–1.0
-  strictVramLimits: boolean;    // Prevent spillover to system RAM
-}
-
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -79,7 +73,6 @@ export interface IAllocationConfig {
 export type ModelArchitecture = 'llama' | 'qwen2' | 'mistral' | 'phi' | string;
 export type Quantisation = 'Q4_K_M' | 'Q8_0' | 'F16' | 'F32' | string;
 export type ModelFormat = 'gguf' | 'mlx';
-export type EngineType = 'llama.cpp' | 'mlx';
 
 export interface IModel {
   readonly id: string;
@@ -136,16 +129,6 @@ export interface IRunningModel {
   context_length?: number;
 }
 
-/** One entry from `lms runtime survey --json` */
-export interface ISurveyGpu {
-  index:        number;
-  name:         string;
-  architecture: 'CUDA' | 'Metal' | 'Vulkan' | string;
-  totalVramGb:  number;
-  freeVramGb?:  number;
-  driver?:      string;
-  supported:    boolean;
-}
 
 // ---------------------------------------------------------------------------
 // Speculative Decoding (spec section 7)
@@ -156,21 +139,9 @@ export interface ISpeculativeDecodingConfig {
   enabled: boolean;
 }
 
-export interface ISpeculativeDecodingStats {
-  acceptedDraftTokens: number;
-  rejectedDraftTokens: number;
-  acceptanceRate: number;      // 0.0–1.0 derived field
-}
-
 // ---------------------------------------------------------------------------
 // Inference & Batching (spec section 6)
 // ---------------------------------------------------------------------------
-
-export interface IBatchingConfig {
-  maxConcurrentPredictions: number;   // n_parallel, default 4
-  unifiedKvCache: boolean;            // Must default true
-  engine: EngineType;
-}
 
 export interface IInferenceSlot {
   readonly slotId: number;
@@ -195,30 +166,6 @@ export interface IPerformanceKPIs {
 // MCP / Toolchain (spec section 8)
 // ---------------------------------------------------------------------------
 
-export interface IMCPServer {
-  readonly id: string;
-  name: string;
-  url: string;
-  headers?: Record<string, string>;
-  trusted: boolean;
-  permissions: IMCPPermissions;
-}
-
-export interface IMCPPermissions {
-  filesystem: 'none' | 'read' | 'read-write';
-  network: boolean;
-  codeExecution: boolean;
-}
-
-export interface IMCPToolCall {
-  readonly id: string;
-  serverId: string;
-  toolName: string;
-  params: Record<string, unknown>;
-  result?: Record<string, unknown>;
-  error?: string;
-  timestamp: Date;
-}
 
 // ---------------------------------------------------------------------------
 // LM Studio /api/v0/ REST API — Chat Completions, Text Completions, Embeddings
@@ -382,18 +329,6 @@ export interface IUser {
   username: string;
   role: UserRole;
   createdAt: Date;
-}
-
-export interface ISession {
-  userId: number;
-  token: string;
-  expiresAt: Date;
-}
-
-export interface INodeCredentials {
-  nodeId: string;
-  apiKey: string;
-  lastHandshake: Date;
 }
 
 // ---------------------------------------------------------------------------

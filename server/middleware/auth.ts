@@ -10,7 +10,7 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env['JWT_SECRET'] ?? 'change_this_before_deploying';
 
-export interface AuthPayload {
+interface AuthPayload {
   sub: number;
   username: string;
   role: 'admin' | 'viewer';
@@ -33,7 +33,10 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   }
 }
 
-/** Use this for admin-only routes */
+/**
+ * Use this for admin-only routes.
+ * Kept intentionally as security scaffolding for privileged remote orchestration routes.
+ */
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   requireAuth(req, res, () => {
     const user = res.locals['user'] as AuthPayload | undefined;

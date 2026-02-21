@@ -17,6 +17,7 @@ import { AuthService } from '@/services/AuthService';
 type AuthMethod  = 'key' | 'password';
 type RemoteTab   = 'connect' | 'status' | 'install' | 'hardware';
 type DaemonState = 'running' | 'starting' | 'stopped' | 'unknown';
+type InstallMethod = 'official' | 'npm';
 
 interface ProbeResult {
   host:          string;
@@ -35,8 +36,23 @@ interface SurveyResult {
 }
 
 interface TermLine {
-  type: 'stdout' | 'stderr' | 'info' | 'error' | 'exit';
+  type: 'stdout' | 'stderr' | 'info' | 'warn' | 'error' | 'exit';
   text: string;
+}
+
+interface InstallStep {
+  label:  string;
+  status: 'pending' | 'active' | 'done' | 'error';
+  note?:  string;
+}
+
+interface InstallStreamEvent {
+  type:       'stdout' | 'stderr' | 'info' | 'warn' | 'error' | 'exit' | 'step';
+  line?:      string;
+  step?:      number;
+  totalSteps?: number;
+  label?:     string;
+  status?:    'active' | 'done' | 'error';
 }
 
 export class RemoteView {
@@ -60,6 +76,8 @@ export class RemoteView {
   private streamAbort: AbortController | null = null;
   private streaming   = false;
   private termLines:  TermLine[] = [];
+  private installMethod: InstallMethod = (localStorage.getItem('dp_install_method') === 'npm' ? 'npm' : 'official');
+  private installSteps: InstallStep[] = this.defaultInstallSteps();
 
   private survey:    SurveyResult | null = null;
   private surveying  = false;
@@ -84,6 +102,77 @@ export class RemoteView {
   // ---------------------------------------------------------------------------
   // Actions
   // ---------------------------------------------------------------------------
+
+  private defaultInstallSteps(): InstallStep[] {
+    return [
+      { label: 'SSH connection',          status: 'pending' },
+      { label: 'Remote platform detection', status: 'pending' },
+      { label: 'Installer preflight',     status: 'pending' },
+      { label: 'Run installer',           status: 'pending' },
+      { label: 'Verify lms CLI',          status: 'pending' },
+      { label: 'Daemon bootstrap',        status: 'pending' },
+    ];
+  }
+
+  private resetInstallSteps(): void {
+    this.installSteps = this.defaultInstallSteps();
+  }
+
+  private installProgressPercent(): number {
+    const total = this.installSteps.length || 1;
+    const done = this.installSteps.filter(s => s.status === 'done').length;
+    const active = this.installSteps.some(s => s.status === 'active') ? 1 : 0;
+    return Math.min(100, Math.round(((done + active * 0.45) / total) * 100));
+  }
+
+  private applyInstallStepEvent(evt: InstallStreamEvent): void {
+    if (!evt.step || !evt.status) return;
+    const idx = evt.step - 1;
+    if (idx < 0 || idx >= this.installSteps.length) return;
+    const step = this.installSteps[idx];
+    if (!step) return;
+    step.status = evt.status;
+    if (evt.label) step.label = evt.label;
+    if (evt.line) step.note = evt.line;
+    if (evt.status === 'active') {
+      for (let i = 0; i < idx; i++) {
+        const prev = this.installSteps[i];
+        if (prev && prev.status === 'pending') prev.status = 'done';
+      }
+    }
+  }
+
+  private repaintInstallWizard(): void {
+    const pct = this.installProgressPercent();
+    const pctEl = document.getElementById('remote-install-progress-pct');
+    if (pctEl) pctEl.textContent = `${pct}%`;
+    const barEl = document.getElementById('remote-install-progress-bar') as HTMLDivElement | null;
+    if (barEl) barEl.style.width = `${pct}%`;
+
+    const stepsEl = document.getElementById('remote-install-steps');
+    if (!stepsEl) return;
+    stepsEl.innerHTML = this.installSteps.map(s => {
+      const badge = s.status === 'done'
+        ? '✓'
+        : s.status === 'active'
+          ? '…'
+          : s.status === 'error'
+            ? '✕'
+            : '•';
+      const cls = s.status === 'done'
+        ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5'
+        : s.status === 'active'
+          ? 'text-indigo-300 border-indigo-500/30 bg-indigo-500/10'
+          : s.status === 'error'
+            ? 'text-red-300 border-red-500/30 bg-red-500/10'
+            : 'text-slate-500 border-slate-700 bg-slate-800/50';
+      return `
+        <div class="border rounded-lg px-2.5 py-2 ${cls}">
+          <p class="text-[11px] font-semibold"><span class="font-mono mr-1.5">${badge}</span>${this.esc(s.label)}</p>
+          ${s.note ? `<p class="text-[10px] mt-1 opacity-80">${this.esc(s.note)}</p>` : ''}
+        </div>`;
+    }).join('');
+  }
 
   private connBody() {
     return {
@@ -146,6 +235,7 @@ export class RemoteView {
 
   private async startInstall(): Promise<void> {
     this.termLines  = [];
+    this.resetInstallSteps();
     this.streaming  = true;
     this.streamAbort = new AbortController();
     this.render(); this.bindEvents();
@@ -153,7 +243,7 @@ export class RemoteView {
     try {
       const res = await AuthService.apiFetch('/api/remote/install/stream', {
         method: 'POST',
-        body:   JSON.stringify(this.connBody()),
+        body:   JSON.stringify({ ...this.connBody(), installMethod: this.installMethod }),
         signal: this.streamAbort.signal,
       });
 
@@ -174,11 +264,23 @@ export class RemoteView {
           const t = raw.trim();
           if (!t.startsWith('data:')) continue;
           try {
-            const evt = JSON.parse(t.slice(5).trim()) as { type: string; line: string };
+            const evt = JSON.parse(t.slice(5).trim()) as InstallStreamEvent;
+            if (evt.type === 'step') {
+              this.applyInstallStepEvent(evt);
+              if (evt.line) {
+                this.termLines.push({
+                  type: evt.status === 'error' ? 'error' : 'info',
+                  text: evt.line,
+                });
+              }
+              this.repaintInstallWizard();
+              this.repaintTerminal();
+              continue;
+            }
             if (evt.type === 'exit') {
-              this.termLines.push({ type: 'info', text: `— process exited (code ${evt.line}) —` });
+              this.termLines.push({ type: 'info', text: `— process exited (code ${evt.line ?? '?'}) —` });
             } else {
-              this.termLines.push({ type: evt.type as TermLine['type'], text: evt.line });
+              this.termLines.push({ type: evt.type as TermLine['type'], text: evt.line ?? '' });
             }
             this.repaintTerminal();
           } catch { /* skip */ }
@@ -193,6 +295,10 @@ export class RemoteView {
 
     this.streaming   = false;
     this.streamAbort = null;
+    // Refresh status after install attempt to reflect CLI presence + daemon state.
+    if (this.host && this.username) {
+      void this.runProbe();
+    }
     this.render(); this.bindEvents();
   }
 
@@ -264,6 +370,8 @@ export class RemoteView {
     el.innerHTML = last.map(l => {
       const cls = l.type === 'stderr' || l.type === 'error'
         ? 'text-red-400'
+        : l.type === 'warn'
+          ? 'text-amber-400'
         : l.type === 'info'
           ? 'text-slate-500'
           : 'text-emerald-300';
@@ -502,39 +610,89 @@ export class RemoteView {
   // ---- Install tab -----------------------------------------------------------
 
   private renderInstall(): string {
+    const pct = this.installProgressPercent();
     return `
       <section class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <h3 class="text-sm font-bold text-slate-200">Install LM Studio Daemon</h3>
+        <div class="flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <h3 class="text-sm font-bold text-slate-200">Install Wizard</h3>
             <p class="text-[11px] text-slate-500 mt-0.5">
-              Runs <span class="font-mono text-slate-400">curl -fsSL https://lmstudio.ai/install.sh | bash</span>
-              on the remote host via SSH.
+              Guided remote install via SSH with step-by-step status and live output.
             </p>
           </div>
-          ${!this.streaming
-            ? `<button id="r-install"
-                class="px-5 py-2 rounded-lg text-xs font-semibold transition-all
-                       ${!this.host
-                         ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                         : 'bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer'}"
-                       ${!this.host ? 'disabled' : ''}>
-                ↓ Start Install
-              </button>`
-            : `<button id="r-install-stop"
-                class="px-5 py-2 rounded-lg text-xs font-semibold bg-red-600/20 hover:bg-red-600/30
-                       text-red-400 border border-red-500/30 cursor-pointer transition-all">
-                ✕ Abort
-              </button>`}
+          <div class="flex items-center gap-2 shrink-0">
+            <div class="flex rounded-lg overflow-hidden border border-slate-700 text-[11px] font-semibold">
+              <button id="r-install-method-official"
+                class="px-3 py-1.5 transition-all ${this.installMethod === 'official'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}"
+                ${this.streaming ? 'disabled' : ''}>
+                Official Script
+              </button>
+              <button id="r-install-method-npm"
+                class="px-3 py-1.5 transition-all ${this.installMethod === 'npm'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}"
+                ${this.streaming ? 'disabled' : ''}>
+                npm Package
+              </button>
+            </div>
+            ${!this.streaming
+              ? `<button id="r-install"
+                  class="px-5 py-2 rounded-lg text-xs font-semibold transition-all
+                         ${!this.host
+                           ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                           : 'bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer'}"
+                         ${!this.host ? 'disabled' : ''}>
+                  ↓ Start Install
+                </button>`
+              : `<button id="r-install-stop"
+                  class="px-5 py-2 rounded-lg text-xs font-semibold bg-red-600/20 hover:bg-red-600/30
+                         text-red-400 border border-red-500/30 cursor-pointer transition-all">
+                  ✕ Abort
+                </button>`}
+          </div>
+        </div>
+
+        <div class="bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-3 space-y-2.5">
+          <div class="flex items-center justify-between text-[11px]">
+            <span class="uppercase tracking-wider font-semibold text-slate-500">Installation Progress</span>
+            <span id="remote-install-progress-pct" class="font-mono text-slate-300">${pct}%</span>
+          </div>
+          <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+            <div id="remote-install-progress-bar" class="h-full bg-indigo-500 transition-all duration-300" style="width:${pct}%"></div>
+          </div>
+          <div id="remote-install-steps" class="grid grid-cols-1 md:grid-cols-2 gap-2">
+            ${this.installSteps.map(s => {
+              const badge = s.status === 'done'
+                ? '✓'
+                : s.status === 'active'
+                  ? '…'
+                  : s.status === 'error'
+                    ? '✕'
+                    : '•';
+              const cls = s.status === 'done'
+                ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5'
+                : s.status === 'active'
+                  ? 'text-indigo-300 border-indigo-500/30 bg-indigo-500/10'
+                  : s.status === 'error'
+                    ? 'text-red-300 border-red-500/30 bg-red-500/10'
+                    : 'text-slate-500 border-slate-700 bg-slate-800/50';
+              return `
+                <div class="border rounded-lg px-2.5 py-2 ${cls}">
+                  <p class="text-[11px] font-semibold"><span class="font-mono mr-1.5">${badge}</span>${this.esc(s.label)}</p>
+                  ${s.note ? `<p class="text-[10px] mt-1 opacity-80">${this.esc(s.note)}</p>` : ''}
+                </div>`;
+            }).join('')}
+          </div>
         </div>
 
         <div class="flex items-start gap-3 bg-amber-500/5 border border-amber-500/20 rounded-lg px-4 py-3">
           <span class="text-amber-400 text-sm flex-shrink-0">⚠</span>
           <p class="text-[11px] text-amber-400/70 leading-relaxed">
             This command modifies the remote system. Ensure you have a working SSH key and admin/sudo
-            rights before proceeding. Review the install script at
-            <span class="font-mono text-amber-300/60">https://lmstudio.ai/install.sh</span> if you have
-            not done so already.
+            rights before proceeding. Method: <span class="font-mono text-amber-300/60">${this.installMethod}</span>
+            (${this.installMethod === 'official' ? 'install.sh/install.ps1' : 'npm install -g lmstudio'}).
           </p>
         </div>
 
@@ -560,6 +718,10 @@ export class RemoteView {
                 }).join('')}
           </div>
         </div>
+
+        <p class="text-[10px] text-slate-600">
+          After install, the bridge now performs a version check and attempts daemon startup automatically.
+        </p>
       </section>`;
   }
 
@@ -651,6 +813,18 @@ export class RemoteView {
     });
     document.getElementById('r-install-stop')?.addEventListener('click', () => {
       this.streamAbort?.abort();
+    });
+    document.getElementById('r-install-method-official')?.addEventListener('click', () => {
+      if (this.streaming) return;
+      this.installMethod = 'official';
+      localStorage.setItem('dp_install_method', this.installMethod);
+      this.render(); this.bindEvents();
+    });
+    document.getElementById('r-install-method-npm')?.addEventListener('click', () => {
+      if (this.streaming) return;
+      this.installMethod = 'npm';
+      localStorage.setItem('dp_install_method', this.installMethod);
+      this.render(); this.bindEvents();
     });
   }
 

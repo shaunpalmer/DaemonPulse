@@ -9,7 +9,7 @@
  *   Red     → Error / Stalled
  */
 
-export type BadgeVariant = 'active' | 'idle' | 'warning' | 'error' | 'selected';
+type BadgeVariant = 'active' | 'idle' | 'warning' | 'error' | 'selected';
 
 const VARIANT_CLASSES: Record<BadgeVariant, string> = {
   active:   'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',

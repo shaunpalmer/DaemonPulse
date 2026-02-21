@@ -152,6 +152,13 @@ export class SettingsView {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   private render(): void {
+    const authPersistence = AuthService.getPersistenceStatus();
+    const authNoticeText = authPersistence.persisted
+      ? `Persisted login (${authPersistence.source})`
+      : authPersistence.source === 'session'
+        ? 'Session-only login (not persisted)'
+        : 'No active persisted login';
+
     this.root.innerHTML = `
       <div class="max-w-xl mx-auto py-8 px-4 space-y-8 text-sm">
 
@@ -404,6 +411,10 @@ export class SettingsView {
         <!-- Session -->
         <section class="bg-slate-900 border border-slate-800 rounded-xl px-5 py-4 space-y-3">
           <h2 class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Session</h2>
+          <div class="flex items-center gap-2 text-[11px]">
+            <span class="w-2 h-2 rounded-full ${authPersistence.persisted ? 'bg-emerald-400' : 'bg-red-500'}"></span>
+            <span class="${authPersistence.persisted ? 'text-emerald-400' : 'text-red-400'}">${authNoticeText}</span>
+          </div>
           <div class="flex items-center justify-between">
             <div class="text-[12px] text-slate-400">
               Signed in as

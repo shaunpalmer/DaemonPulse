@@ -25,7 +25,7 @@ export interface SSHConnectOpts {
   connectTimeout?: number;
 }
 
-export interface RunResult {
+interface RunResult {
   stdout:   string;
   stderr:   string;
   exitCode: number;
@@ -94,7 +94,7 @@ export function runCommand(conn: Client, cmd: string): Promise<RunResult> {
  *   data: {"type":"stderr","line":"..."}
  *   data: {"type":"exit","code":"0"}
  */
-export function streamCommand(conn: Client, cmd: string, res: Response): Promise<void> {
+export function streamCommand(conn: Client, cmd: string, res: Response): Promise<number> {
   return new Promise((resolve, reject) => {
     conn.exec(cmd, (err, stream) => {
       if (err) { reject(err); return; }
@@ -116,7 +116,11 @@ export function streamCommand(conn: Client, cmd: string, res: Response): Promise
       pipeStream(stream,        'stdout');
       pipeStream(stream.stderr, 'stderr');
 
-      stream.on('close', (code: number) => { emit('exit', String(code ?? 0)); resolve(); });
+      stream.on('close', (code: number) => {
+        const exitCode = code ?? 0;
+        emit('exit', String(exitCode));
+        resolve(exitCode);
+      });
       stream.on('error', reject);
     });
   });
