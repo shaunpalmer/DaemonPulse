@@ -19,8 +19,10 @@ if (-not $status) {
 # Build commit message
 if (-not $Message) {
     $date    = Get-Date -Format "yyyy-MM-dd HH:mm"
-    $files   = (git diff --cached --name-only; git diff --name-only; git ls-files --others --exclude-standard) |
-               Sort-Object -Unique | Select-Object -First 5
+    $staged   = git diff --cached --name-only
+    $unstaged = git diff --name-only
+    $untracked = git ls-files --others --exclude-standard
+    $files   = ($staged + $unstaged + $untracked) | Sort-Object -Unique | Select-Object -First 5
     $summary = $files -join ", "
     $Message = "chore: session save $date — $summary"
 }
