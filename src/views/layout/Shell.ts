@@ -7,9 +7,11 @@
  * purely responsible for layout and view composition.
  */
 
-import { Store }    from '@/core/Store';
-import { EventBus } from '@/core/EventBus';
-import { Sidebar }  from './Sidebar';
+import { Store }       from '@/core/Store';
+import { EventBus }    from '@/core/EventBus';
+import { AuthService } from '@/services/AuthService';
+import { Router }      from '@/core/Router';
+import { Sidebar }     from './Sidebar';
 
 import { LoginView }     from '@/views/LoginView';
 import { FleetView }     from '@/views/FleetView';
@@ -18,6 +20,7 @@ import { PulseView }     from '@/views/PulseView';
 import { ToolchainView } from '@/views/ToolchainView';
 import { ConsoleView }   from '@/views/ConsoleView';
 import { SettingsView }  from '@/views/SettingsView';
+import { RemoteView }    from '@/views/RemoteView';
 import type { DaemonController } from '@/controllers/DaemonController';
 import type { AuthController }   from '@/controllers/AuthController';
 
@@ -55,7 +58,9 @@ export class Shell {
 
     // Re-render main canvas on route change
     Store.subscribe(state => this.renderCanvas(state.currentRoute));
-    EventBus.on('AUTH_SUCCESS', () => this.renderCanvas(Store.getState().currentRoute));
+    // NOTE: no separate AUTH_SUCCESS listener here — AuthController.login() calls
+    // Router.navigate('/fleet') before emitting AUTH_SUCCESS, so the Store
+    // subscriber above already fires with the correct /fleet route.
 
     // Initial render
     this.renderCanvas(Store.getState().currentRoute);
@@ -64,6 +69,13 @@ export class Shell {
   private renderCanvas(route: string): void {
     const canvas = document.getElementById('main-canvas');
     if (!canvas) return;
+
+    // Auth guard — any protected route requires a valid session.
+    // If the token has expired or was never set, bounce to /login.
+    if (route !== '/login' && !AuthService.isAuthenticated()) {
+      Router.navigate('/login');
+      return;
+    }
 
     // Tear down previous view (clears intervals, event listeners, etc.)
     this.currentView?.unmount?.();
@@ -79,6 +91,7 @@ export class Shell {
       case '/pulse':     view = new PulseView(canvas);     break;
       case '/toolchain': view = new ToolchainView(canvas); break;
       case '/console':   view = new ConsoleView(canvas);   break;
+      case '/remote':    view = new RemoteView(canvas);    break;
       case '/settings':  view = new SettingsView(canvas);  break;
       default:
         canvas.innerHTML = `

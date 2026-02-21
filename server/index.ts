@@ -12,9 +12,10 @@ import express from 'express';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { initDb } from './db/schema';
-import { authRouter } from './routes/auth';
-import { proxyRouter } from './routes/proxy';
-import { requireAuth } from './middleware/auth';
+import { authRouter }   from './routes/auth';
+import { proxyRouter }  from './routes/proxy';
+import { remoteRouter } from './routes/remote';
+import { requireAuth }  from './middleware/auth';
 
 // Load .env manually — no dotenv dependency needed
 try {
@@ -43,7 +44,8 @@ initDb();
 app.use('/api/auth', authRouter);
 
 // --- Protected routes (JWT required) ---
-app.use('/api/proxy', requireAuth, proxyRouter);
+app.use('/api/proxy',  requireAuth, proxyRouter);
+app.use('/api/remote', requireAuth, remoteRouter);
 
 app.listen(PORT, () => {
   console.log(`[DaemonPulse Bridge] Listening on http://localhost:${PORT}`);

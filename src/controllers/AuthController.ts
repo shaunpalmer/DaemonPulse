@@ -20,8 +20,10 @@ export class AuthController {
       };
       const user = { id: payload.sub, username: payload.username, role: payload.role, createdAt: new Date() };
       Store.setUser(user);
-      EventBus.emit({ type: 'AUTH_SUCCESS', payload: user });
+      // Navigate BEFORE emitting AUTH_SUCCESS so the Shell's Store subscriber
+      // already sees the /fleet route when it reacts to the state change.
       Router.navigate('/fleet');
+      EventBus.emit({ type: 'AUTH_SUCCESS', payload: user });
     } else {
       EventBus.emit({ type: 'AUTH_FAILED', payload: { reason: result.error ?? 'Unknown error' } });
     }

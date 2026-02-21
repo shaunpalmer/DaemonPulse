@@ -15,6 +15,7 @@ const NAV_ITEMS: { route: Route; label: string; icon: string }[] = [
   { route: '/pulse',     label: 'The Pulse',     icon: '◎' },
   { route: '/toolchain', label: 'The Toolchain', icon: '⎘' },
   { route: '/console',   label: 'The Console',   icon: '>' },
+  { route: '/remote',    label: 'Remote Nodes',  icon: '⌁' },
   { route: '/settings',  label: 'Settings',      icon: '⚊' },
 ];
 

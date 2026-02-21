@@ -15,10 +15,11 @@ export type Route =
   | '/toolchain'
   | '/console'
   | '/settings'
+  | '/remote'
   | '/login';
 
 const VALID_ROUTES = new Set<Route>([
-  '/fleet', '/forge', '/pulse', '/toolchain', '/console', '/settings', '/login',
+  '/fleet', '/forge', '/pulse', '/toolchain', '/console', '/settings', '/remote', '/login',
 ]);
 
 function isValidRoute(path: string): path is Route {

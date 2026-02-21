@@ -31,7 +31,7 @@ class StoreClass {
     nodes: new Map(),
     loadedModels: new Map(),
     inferenceSlots: [],
-    currentRoute: '/fleet',
+    currentRoute: '/login',   // safe default — Router.init() will correct it from the hash
     isConnecting: false,
   };
 
