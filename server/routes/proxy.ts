@@ -437,6 +437,126 @@ proxyRouter.get('/logs/stream', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Daemon health stream — SSE pushed by the proxy every HEALTH_INTERVAL_MS.
+// Client subscribes once; proxy owns the poll cycle against the daemon.
+// Emits: { state: 'running'|'stopped'|'stalled', latencyMs: number }
+// ---------------------------------------------------------------------------
+const HEALTH_INTERVAL_MS  = 15_000;
+const STALL_THRESHOLD_MS  =  5_000;  // daemon response >5 s → stalled
+
+proxyRouter.get('/health/stream', (req, res) => {
+  res.setHeader('Content-Type',      'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control',     'no-cache');
+  res.setHeader('Connection',        'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const probe = async () => {
+    const start = Date.now();
+    try {
+      const r = await fetch(`${getDaemonUrl()}/api/v0/models`, {
+        signal:  AbortSignal.timeout(STALL_THRESHOLD_MS),
+        headers: getDaemonHeaders(),
+      });
+      const latencyMs = Date.now() - start;
+      // 200 or 401 both mean the HTTP stack is alive
+      const state = (r.ok || r.status === 401) ? 'running' : 'stopped';
+      res.write(`data: ${JSON.stringify({ state, latencyMs })}\n\n`);
+    } catch {
+      const latencyMs = Date.now() - start;
+      const state = latencyMs >= STALL_THRESHOLD_MS ? 'stalled' : 'stopped';
+      res.write(`data: ${JSON.stringify({ state, latencyMs })}\n\n`);
+    }
+  };
+
+  void probe();   // immediate first event
+  const timer = setInterval(() => void probe(), HEALTH_INTERVAL_MS);
+  req.on('close', () => clearInterval(timer));
+});
+
+// One-shot probe — triggered by client on user action for immediate state update
+proxyRouter.post('/health/probe', (_req, res) => {
+  void (async () => {
+    const start = Date.now();
+    try {
+      const r = await fetch(`${getDaemonUrl()}/api/v0/models`, {
+        signal:  AbortSignal.timeout(STALL_THRESHOLD_MS),
+        headers: getDaemonHeaders(),
+      });
+      const latencyMs = Date.now() - start;
+      const state = (r.ok || r.status === 401) ? 'running' : 'stopped';
+      res.json({ state, latencyMs });
+    } catch {
+      const latencyMs = Date.now() - start;
+      res.json({ state: latencyMs >= STALL_THRESHOLD_MS ? 'stalled' : 'stopped', latencyMs });
+    }
+  })();
+});
+
+// ---------------------------------------------------------------------------
+// MCP tool discovery — calls tools/list on a remote MCP server on behalf of
+// the client (avoids CORS issues when the MCP server does not set CORS headers)
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/proxy/mcp/discover
+ * Body: { url: string; headers?: Record<string, string> }
+ * Returns: an array of MCPTool objects from the server's tools/list response,
+ *          OR a 502 error object on failure.
+ *
+ * Protocol: MCP uses JSON-RPC 2.0 over HTTP POST.
+ */
+proxyRouter.post('/mcp/discover', (req, res) => {
+  void (async () => {
+    const body = req.body as { url?: string; headers?: Record<string, string> };
+    if (!body.url) {
+      res.status(400).json({ error: 'url is required' });
+      return;
+    }
+
+    const extraHeaders: Record<string, string> = {};
+    if (body.headers && typeof body.headers === 'object') {
+      for (const [k, v] of Object.entries(body.headers)) {
+        if (typeof k === 'string' && typeof v === 'string') extraHeaders[k] = v;
+      }
+    }
+
+    const rpcPayload = JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', params: {}, id: 1 });
+    try {
+      const r = await fetch(body.url, {
+        method: 'POST',
+        signal: AbortSignal.timeout(10_000),
+        headers: {
+          'Content-Type': 'application/json',
+          Accept:         'application/json',
+          ...extraHeaders,
+        },
+        body: rpcPayload,
+      });
+
+      if (!r.ok) {
+        res.status(502).json({ error: `MCP server returned HTTP ${r.status}`, detail: await r.text() });
+        return;
+      }
+
+      const json = await r.json() as {
+        result?: { tools?: unknown[] };
+        error?:  { code?: number; message?: string };
+      };
+
+      if (json.error) {
+        res.status(502).json({ error: json.error.message ?? 'JSON-RPC error', code: json.error.code });
+        return;
+      }
+
+      res.json({ tools: json.result?.tools ?? [] });
+    } catch (err) {
+      res.status(502).json({ error: 'Failed to reach MCP server', detail: String(err) });
+    }
+  })();
+});
+
+// ---------------------------------------------------------------------------
 // CLI-backed routes — lms runtime survey, lms ps, lms load --estimate-only
 // ---------------------------------------------------------------------------
 

@@ -19,7 +19,7 @@ import { Shell }            from '@/views/layout/Shell';
 
 // --- Compose the service/controller graph ---
 
-const daemonService    = new DaemonService('');          // baseUrl injected from env at build time
+const daemonService    = new DaemonService(import.meta.env.VITE_DAEMON_BASE_URL ?? '');  // baseUrl injected from env at build time
 const heartbeatService = new HeartbeatService('local', daemonService);
 const modelService     = new ModelService(daemonService);
 

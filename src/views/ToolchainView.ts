@@ -24,6 +24,16 @@ interface IAuditEntry {
   output:   string;
 }
 
+interface IMCPTool {
+  name:        string;
+  description?: string;
+  inputSchema?: {
+    type?:        string;
+    properties?:  Record<string, { type?: string; description?: string }>;
+    required?:    string[];
+  };
+}
+
 export class ToolchainView {
   private models:    LMSModelRecord[] = [];
   private modelsErr: string | null    = null;
@@ -33,6 +43,11 @@ export class ToolchainView {
   private lastResponse: ILMSChatResponse | null = null;
   private responseErr: string | null            = null;
   private auditLog: IAuditEntry[] = [];
+
+  private mcpTools:         IMCPTool[] = [];
+  private discoveringTools  = false;
+  private toolsError:       string | null = null;
+  private toolsDiscovered   = false;
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -58,6 +73,43 @@ export class ToolchainView {
     } catch (err) {
       this.modelsErr = String(err);
     }
+    this.render();
+    this.bindEvents();
+  }
+
+  private async fetchMcpTools(): Promise<void> {
+    const url     = (document.getElementById('tc-url') as HTMLInputElement | null)?.value.trim() ?? '';
+    const rawHdr  = (document.getElementById('tc-headers') as HTMLTextAreaElement | null)?.value.trim() ?? '';
+
+    if (!url) return;
+
+    let headers: Record<string, string> | undefined;
+    if (rawHdr) {
+      try { headers = JSON.parse(rawHdr) as Record<string, string>; }
+      catch { /* ignore malformed headers */ }
+    }
+
+    this.discoveringTools = true;
+    this.toolsError       = null;
+    this.toolsDiscovered  = false;
+    this.render();
+    this.bindEvents();
+
+    try {
+      const res = await AuthService.apiFetch('/api/proxy/mcp/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, headers }),
+      });
+      const json = await res.json() as { tools?: IMCPTool[]; error?: string };
+      if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`);
+      this.mcpTools        = (json.tools ?? []) as IMCPTool[];
+      this.toolsDiscovered = true;
+    } catch (err) {
+      this.toolsError = String(err);
+    }
+
+    this.discoveringTools = false;
     this.render();
     this.bindEvents();
   }
@@ -273,9 +325,19 @@ export class ToolchainView {
     return `
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-[11px] text-slate-500 font-semibold uppercase tracking-wider mb-1">
-            Server URL
-          </label>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-[11px] text-slate-500 font-semibold uppercase tracking-wider">
+              Server URL
+            </label>
+            <button id="tc-discover"
+              class="text-[10px] font-semibold px-2 py-0.5 rounded transition-all
+                     ${this.discoveringTools
+                       ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                       : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 cursor-pointer border border-emerald-500/30'}"
+              ${this.discoveringTools ? 'disabled' : ''}>
+              ${this.discoveringTools ? '⏳ Discovering…' : '🔍 Discover Tools'}
+            </button>
+          </div>
           <input id="tc-url" type="text" value="https://huggingface.co/mcp"
             placeholder="https://example.com/mcp"
             class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2
@@ -317,7 +379,74 @@ export class ToolchainView {
           </p>
         </div>
       </div>
+      ${this.renderToolDiscovery()}
     `;
+  }
+
+  private renderToolDiscovery(): string {
+    if (!this.toolsDiscovered && !this.toolsError) return '';
+
+    if (this.toolsError) {
+      return `
+        <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+          <p class="text-xs font-semibold text-red-400 mb-1">Discovery Failed</p>
+          <p class="text-[11px] font-mono text-red-300">${this.esc(this.toolsError)}</p>
+        </div>`;
+    }
+
+    if (this.mcpTools.length === 0) {
+      return `
+        <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-3">
+          <p class="text-[11px] text-slate-500 text-center">Server responded — no tools advertised.</p>
+        </div>`;
+    }
+
+    return `
+      <div class="border border-emerald-500/20 rounded-lg overflow-hidden">
+        <div class="flex items-center justify-between bg-emerald-500/5 px-3 py-2 border-b border-emerald-500/20">
+          <p class="text-[11px] font-bold tracking-wider uppercase text-emerald-400">
+            Discovered Tools (${this.mcpTools.length})
+          </p>
+          <button id="tc-use-all"
+            class="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-600/20 hover:bg-emerald-600/30
+                   text-emerald-400 border border-emerald-500/30 cursor-pointer transition-all">
+            Use All
+          </button>
+        </div>
+        <div class="divide-y divide-slate-800 max-h-56 overflow-y-auto">
+          ${this.mcpTools.map((t, i) => `
+            <div class="px-3 py-2 flex items-start gap-3 hover:bg-slate-800/40 transition-colors group">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold font-mono text-emerald-300">${this.esc(t.name)}</span>
+                  ${this.renderParamBadges(t)}
+                </div>
+                ${t.description ? `<p class="text-[11px] text-slate-400 mt-0.5 leading-snug">${this.esc(t.description)}</p>` : ''}
+              </div>
+              <button class="tc-add-tool flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity
+                             text-[10px] font-semibold px-2 py-0.5 rounded bg-indigo-600/20
+                             hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 cursor-pointer"
+                      data-tool="${this.esc(t.name)}" data-idx="${i}">
+                + Allow
+              </button>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  private renderParamBadges(t: IMCPTool): string {
+    const props = t.inputSchema?.properties;
+    if (!props) return '';
+    const required = new Set(t.inputSchema?.required ?? []);
+    return Object.entries(props).slice(0, 4).map(([name]) => `
+      <span class="text-[9px] font-mono px-1.5 py-0.5 rounded
+                   ${required.has(name)
+                     ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                     : 'bg-slate-700/50 text-slate-500 border border-slate-600/30'}">
+        ${this.esc(name)}
+      </span>`).join('') + (Object.keys(props).length > 4
+        ? `<span class="text-[9px] text-slate-600">+${Object.keys(props).length - 4} more</span>`
+        : '');
   }
 
   private renderPluginFields(): string {
@@ -428,13 +557,41 @@ export class ToolchainView {
       this.bindEvents();
     });
     document.getElementById('tc-tab-plugin')?.addEventListener('click', () => {
-      this.intType = 'plugin';
+      this.intType        = 'plugin';
+      this.mcpTools       = [];
+      this.toolsDiscovered = false;
+      this.toolsError     = null;
       this.render();
       this.bindEvents();
     });
     document.getElementById('tc-fire')?.addEventListener('click', () => {
       if (!this.firing) void this.fireRequest();
     });
+
+    // MCP tool discovery
+    document.getElementById('tc-discover')?.addEventListener('click', () => {
+      if (!this.discoveringTools) void this.fetchMcpTools();
+    });
+
+    // Add all discovered tools to the Allowed Tools field
+    document.getElementById('tc-use-all')?.addEventListener('click', () => {
+      const input = document.getElementById('tc-tools') as HTMLInputElement | null;
+      if (input) input.value = this.mcpTools.map(t => t.name).join(', ');
+    });
+
+    // "+ Allow" per-tool buttons
+    for (const btn of document.querySelectorAll<HTMLButtonElement>('.tc-add-tool')) {
+      btn.addEventListener('click', () => {
+        const toolName = btn.dataset['tool'] ?? '';
+        if (!toolName) return;
+        const input = document.getElementById('tc-tools') as HTMLInputElement | null;
+        if (!input) return;
+        const existing = input.value.split(',').map(t => t.trim()).filter(Boolean);
+        if (!existing.includes(toolName)) {
+          input.value = [...existing, toolName].join(', ');
+        }
+      });
+    }
   }
 
   private esc(s: string): string {

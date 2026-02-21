@@ -152,7 +152,7 @@ export class DaemonService {
   // --- Log streaming (spec section 9) ---
 
   openLogStream(nodeId: string, onLine: (line: string) => void): EventSource {
-    const es = new EventSource(`/api/proxy/logs/stream?nodeId=${encodeURIComponent(nodeId)}`);
+    const es = new EventSource(`${this.baseUrl}/api/proxy/logs/stream?nodeId=${encodeURIComponent(nodeId)}`);
     es.onmessage = (e) => onLine(e.data as string);
     return es;
   }
@@ -162,7 +162,7 @@ export class DaemonService {
   private async get<T>(path: string): Promise<IApiResult<T>> {
     const start = performance.now();
     try {
-      const res = await fetch(path, { headers: this.authHeaders() });
+      const res = await fetch(`${this.baseUrl}${path}`, { headers: this.authHeaders() });
       const latencyMs = performance.now() - start;
       if (res.ok) return { success: true, data: await res.json() as T, latencyMs };
       return { success: false, latencyMs };
@@ -174,7 +174,7 @@ export class DaemonService {
   private async post<T>(path: string, body?: unknown): Promise<IApiResult<T>> {
     const start = performance.now();
     try {
-      const res = await fetch(path, {
+      const res = await fetch(`${this.baseUrl}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...this.authHeaders() },
         ...(body !== undefined && { body: JSON.stringify(body) }),
