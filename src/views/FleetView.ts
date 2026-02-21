@@ -147,9 +147,7 @@ export class FleetView {
 
   private async fetchSurvey(): Promise<void> {
     try {
-      const res = await fetch('/api/proxy/runtime/survey', {
-        headers: { Authorization: `Bearer ${AuthService.getToken() ?? ''}` },
-      });
+      const res = await AuthService.apiFetch('/api/proxy/runtime/survey');
       if (!res.ok) { this.surveyError = true; return; }
       // Survey returns GPU list — map onto this.gpus if real data available
       const json = await res.json() as { gpus?: Array<{ index: number; name: string; totalVramGb: number; freeVramGb?: number; architecture?: string }> } | { error?: string };
@@ -174,9 +172,7 @@ export class FleetView {
 
   private async fetchRunning(): Promise<void> {
     try {
-      const res = await fetch('/api/proxy/models/running', {
-        headers: { Authorization: `Bearer ${AuthService.getToken() ?? ''}` },
-      });
+      const res = await AuthService.apiFetch('/api/proxy/models/running');
       if (!res.ok) return;
       const json = await res.json() as IRunningModel[] | { models?: IRunningModel[] } | { error?: string };
       if (Array.isArray(json)) {
@@ -466,10 +462,7 @@ export class FleetView {
       if (!confirm('Kill switch: eject all models from VRAM via LM Studio. Continue?')) return;
       // lms unload --all is faster and atomic compared to iterating REST calls individually.
       try {
-        await fetch('/api/proxy/models/unload-all', {
-          method:  'POST',
-          headers: { Authorization: `Bearer ${sessionStorage.getItem('dp_auth_token') ?? ''}` },
-        });
+        await AuthService.apiFetch('/api/proxy/models/unload-all', { method: 'POST' });
       } catch { /* ignore — best-effort kill switch */ }
     });
 

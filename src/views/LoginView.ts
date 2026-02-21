@@ -63,7 +63,44 @@ export class LoginView {
                 class="w-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50 disabled:opacity-50 disabled:cursor-not-allowed">
                 Sign In
               </button>
+              <div class="text-center pt-1">
+                <button type="button" id="login-forgot"
+                  class="text-[11px] text-slate-600 hover:text-indigo-400 transition-colors focus:outline-none">
+                  Forgot password?
+                </button>
+              </div>
             </form>
+          </div>
+
+          <!-- Forgot-password modal (shown when reset flow not yet active) -->
+          <div id="forgot-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div id="forgot-modal-backdrop" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+            <div class="relative bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-sm shadow-2xl">
+              <div class="flex items-start gap-3 mb-4">
+                <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="text-indigo-400">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="text-sm font-semibold text-slate-200">Password Reset</h3>
+                  <p class="text-[11px] text-slate-500 mt-0.5">Email-based reset &mdash; coming soon</p>
+                </div>
+              </div>
+              <p class="text-xs text-slate-400 leading-relaxed mb-5">
+                Automated password reset via email is on the roadmap but not yet active.
+                In the meantime, an admin can reset your password directly via the server CLI:
+              </p>
+              <pre class="bg-[#0d0f14] border border-slate-800 rounded-lg px-3 py-2.5 text-[11px] text-indigo-300 font-mono overflow-x-auto mb-5">npm run seed</pre>
+              <p class="text-[10px] text-slate-600 mb-5">Re-running the seed script resets the default admin credentials.</p>
+              <button id="forgot-modal-close"
+                class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium py-2 rounded-lg transition-colors focus:outline-none">
+                Got it
+              </button>
+            </div>
           </div>
           <div class="mt-4 bg-amber-500/5 border border-amber-500/20 rounded-xl px-4 py-3">
             <p class="text-[10px] text-amber-500/70 leading-relaxed">
@@ -89,7 +126,19 @@ export class LoginView {
     const submit   = document.getElementById('login-submit')    as HTMLButtonElement;
     const pwInput  = document.getElementById('login-password')  as HTMLInputElement;
     const pwToggle = document.getElementById('login-pw-toggle') as HTMLButtonElement;
-    const remember = document.getElementById('login-remember')  as HTMLInputElement;
+    const remember    = document.getElementById('login-remember')    as HTMLInputElement;
+    const forgotBtn   = document.getElementById('login-forgot')       as HTMLButtonElement;
+    const forgotModal = document.getElementById('forgot-modal')        as HTMLDivElement;
+    const forgotClose = document.getElementById('forgot-modal-close')  as HTMLButtonElement;
+    const forgotBack  = document.getElementById('forgot-modal-backdrop') as HTMLDivElement;
+
+    const openForgot  = () => forgotModal.classList.remove('hidden');
+    const closeForgot = () => forgotModal.classList.add('hidden');
+
+    forgotBtn.addEventListener('click', openForgot);
+    forgotClose.addEventListener('click', closeForgot);
+    forgotBack.addEventListener('click', closeForgot);
+    forgotModal.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeForgot(); });
 
     pwToggle.addEventListener('click', () => {
       const revealing    = pwInput.type === 'password';

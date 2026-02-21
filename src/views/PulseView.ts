@@ -102,9 +102,7 @@ export class PulseView {
 
   private async fetchModels(): Promise<void> {
     try {
-      const res  = await fetch('/api/proxy/models', {
-        headers: { Authorization: `Bearer ${AuthService.getToken() ?? ''}` },
-      });
+      const res  = await AuthService.apiFetch('/api/proxy/models');
       if (!res.ok) return;
       const json = await res.json() as { data?: Array<{ id: string; state: string; type: string }> };
       this.models = (json.data ?? [])
@@ -148,12 +146,9 @@ export class PulseView {
     let   firstTokenMs: number | null = null;
 
     try {
-      const res = await fetch('/api/proxy/chat/completions/stream', {
+      const res = await AuthService.apiFetch('/api/proxy/chat/completions/stream', {
         method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization:  `Bearer ${AuthService.getToken() ?? ''}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model:                 this.selectedModel,
           messages,

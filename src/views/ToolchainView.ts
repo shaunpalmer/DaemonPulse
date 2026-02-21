@@ -50,9 +50,7 @@ export class ToolchainView {
 
   private async fetchModels(): Promise<void> {
     try {
-      const res = await fetch('/api/proxy/models', {
-        headers: { Authorization: `Bearer ${AuthService.getToken() ?? ''}` },
-      });
+      const res = await AuthService.apiFetch('/api/proxy/models');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json() as { data?: LMSModelRecord[] };
       this.models  = (json.data ?? []).filter(m => m.type === 'llm');
@@ -114,12 +112,9 @@ export class ToolchainView {
     this.bindEvents();
 
     try {
-      const res = await fetch('/api/proxy/chat', {
+      const res = await AuthService.apiFetch('/api/proxy/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          Authorization: `Bearer ${AuthService.getToken() ?? ''}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);

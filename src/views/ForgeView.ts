@@ -114,12 +114,9 @@ export class ForgeView {
       // NOT a load-time setting.  Persist the selection here so PulseView can pick it up.
       localStorage.setItem('dp_overflow_policy', this.wizardOverflow);
 
-      const res = await fetch('/api/proxy/models/load', {
+      const res = await AuthService.apiFetch('/api/proxy/models/load', {
         method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization:  `Bearer ${AuthService.getToken() ?? ''}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           identifier:     id,
           context_length: this.wizardCtxLen,
@@ -187,12 +184,9 @@ export class ForgeView {
     this.render();
     this.bindEvents();
     try {
-      const res = await fetch('/api/proxy/models/eject', {
+      const res = await AuthService.apiFetch('/api/proxy/models/eject', {
         method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization:  `Bearer ${AuthService.getToken() ?? ''}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier: id }),
       });
       if (!res.ok) this.actionErr = `Eject failed (HTTP ${res.status})`;
@@ -694,12 +688,9 @@ export class ForgeView {
     this.render();
 
     try {
-      const res = await fetch('/api/proxy/models/estimate', {
+      const res = await AuthService.apiFetch('/api/proxy/models/estimate', {
         method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization:  `Bearer ${AuthService.getToken() ?? ''}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model:         this.wizardModel,
           contextLength: this.wizardCtxLen,

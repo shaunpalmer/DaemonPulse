@@ -73,9 +73,8 @@ export class ConsoleView {
     this.updateStatusBar('connecting');
 
     try {
-      const res = await fetch('/api/proxy/logs/stream', {
-        headers: { Authorization: `Bearer ${AuthService.getToken() ?? ''}` },
-        signal:  this.abortCtrl.signal,
+      const res = await AuthService.apiFetch('/api/proxy/logs/stream', {
+        signal: this.abortCtrl.signal,
       });
       // TODO (nice-to-have): open a second fetch to /api/proxy/logs/stream?source=model
       //   (`lms log stream --source model`) for performance stats (tokens/sec, I/O).

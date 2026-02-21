@@ -56,9 +56,7 @@ export class SettingsView {
 
   private async fetchTargets(): Promise<void> {
     try {
-      const res = await fetch('/api/proxy/config/targets', {
-        headers: { Authorization: `Bearer ${AuthService.getToken() ?? ''}` },
-      });
+      const res = await AuthService.apiFetch('/api/proxy/config/targets');
       if (res.ok) {
         const d = (await res.json()) as { activeId: string; targets: TargetRow[] };
         this.activeTargetId = d.activeId;
@@ -71,10 +69,7 @@ export class SettingsView {
   private async activateTarget(id: string): Promise<void> {
     this.targetWorking = true; this.render();
     try {
-      const res = await fetch(`/api/proxy/config/targets/${id}/activate`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${AuthService.getToken() ?? ''}` },
-      });
+      const res = await AuthService.apiFetch(`/api/proxy/config/targets/${id}/activate`, { method: 'POST' });
       if (res.ok) { this.activeTargetId = id; void this.fetchKeyStatus(); }
     } catch { /* leave */ }
     this.targetWorking = false;
@@ -84,10 +79,7 @@ export class SettingsView {
   private async deleteTarget(id: string): Promise<void> {
     this.targetWorking = true; this.render();
     try {
-      await fetch(`/api/proxy/config/targets/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${AuthService.getToken() ?? ''}` },
-      });
+      await AuthService.apiFetch(`/api/proxy/config/targets/${id}`, { method: 'DELETE' });
     } catch { /* leave */ }
     this.targetWorking = false;
     void this.fetchTargets();
@@ -97,12 +89,9 @@ export class SettingsView {
     if (!this.addLabel.trim() || !this.addUrl.trim()) return;
     this.targetWorking = true; this.render();
     try {
-      await fetch('/api/proxy/config/targets', {
+      await AuthService.apiFetch('/api/proxy/config/targets', {
         method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization:  `Bearer ${AuthService.getToken() ?? ''}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           label: this.addLabel.trim(),
           url:   this.addUrl.trim().replace(/\/$/, ''),
@@ -120,9 +109,7 @@ export class SettingsView {
 
   private async fetchKeyStatus(): Promise<void> {
     try {
-      const res = await fetch('/api/proxy/config/daemon-key', {
-        headers: { Authorization: `Bearer ${AuthService.getToken() ?? ''}` },
-      });
+      const res = await AuthService.apiFetch('/api/proxy/config/daemon-key');
       if (res.ok) {
         const d = (await res.json()) as { hasKey: boolean; hint: string };
         this.keyHasKey = d.hasKey;
@@ -134,12 +121,9 @@ export class SettingsView {
 
   private async savePermissionKey(key: string): Promise<void> {
     try {
-      const res = await fetch('/api/proxy/config/daemon-key', {
+      const res = await AuthService.apiFetch('/api/proxy/config/daemon-key', {
         method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization:  `Bearer ${AuthService.getToken() ?? ''}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key }),
       });
       if (res.ok) {
