@@ -15,7 +15,7 @@
 
 import { renderStatusBadge } from '@/views/components/StatusBadge';
 import type { LMSModelRecord } from '@/services/DaemonService';
-import { AuthService } from '@/services/AuthService';
+import { AuthService, AuthRedirectError } from '@/services/AuthService';
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -93,6 +93,7 @@ export class ForgeView {
       this.loading = false;
       this.error   = null;
     } catch (err) {
+      if (err instanceof AuthRedirectError) return; // redirect in progress — do not render error banner
       this.loading = false;
       this.error   = String(err);
     }

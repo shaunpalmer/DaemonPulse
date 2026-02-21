@@ -8,6 +8,18 @@
 
 const TOKEN_KEY = 'dp_auth_token';
 
+/**
+ * Thrown by AuthService.apiFetch() when a 401 is received.
+ * Callers should catch this and bail silently — the redirect to /login
+ * is already in motion. Never display this as a user-facing error.
+ */
+export class AuthRedirectError extends Error {
+  constructor() {
+    super('AUTH_REDIRECT');
+    this.name = 'AuthRedirectError';
+  }
+}
+
 export class AuthService {
   static getToken(): string | null {
     return sessionStorage.getItem(TOKEN_KEY);
@@ -61,6 +73,9 @@ export class AuthService {
       const { Store }  = await import('@/core/Store');
       Store.setUser(null);
       Router.navigate('/login');
+      // Throw so the entire call chain aborts — callers must not render
+      // an error banner while a redirect is already in progress.
+      throw new AuthRedirectError();
     }
     return res;
   }
