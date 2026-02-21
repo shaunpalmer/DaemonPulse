@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.local
+.env
+.env.*
+!.env.example
+data/
+*.db
+*.sqlite
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# docs/ contains internal R&D notes, PRDs, and research artefacts.
+# They live locally but do not ship to the public repo.
+docs/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json

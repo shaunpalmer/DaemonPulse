@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* DaemonPulse design tokens — Slate/Indigo dark theme */
+:root {
+  --color-surface:      #0d0f14;
+  --color-card:         #0f172a;  /* slate-900 */
+  --color-border:       #1e293b;  /* slate-800 */
+  --color-text:         #cbd5e1;  /* slate-300 */
+  --color-muted:        #64748b;  /* slate-500 */
+  --color-active:       #6366f1;  /* indigo-500 */
+  --color-success:      #34d399;  /* emerald-400 */
+  --color-warning:      #fb923c;  /* orange-400 */
+
+  --font-mono: 'Courier New', Courier, monospace;
+}
+
+/* Scrollbar — keep it subtle */
+::-webkit-scrollbar        { width: 6px; }
+::-webkit-scrollbar-track  { background: var(--color-surface); }
+::-webkit-scrollbar-thumb  { background: var(--color-border); border-radius: 3px; }
